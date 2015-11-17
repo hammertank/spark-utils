@@ -21,7 +21,7 @@ import org.apache.spark.streaming.StreamingContext
 import my.spark.util.ConfigUtils
 import my.spark.util.DFSUtils
 
-class ShutdownServer(startPort: Int, maxRetries: Int, ssc: StreamingContext) extends Logging {
+class ShutdownServer(startPort: Int, maxRetries: Int, val ssc: StreamingContext) extends Logging {
 
   private var port = startPort
 
@@ -86,15 +86,8 @@ class ShutdownServer(startPort: Int, maxRetries: Int, ssc: StreamingContext) ext
     throw new Exception(s"Failed to create ShutdownServer on port $port")
   }
 
-  private def saveShutdownServerInfo {
-    val host = ssc.sparkContext.getConf.get("spark.driver.host")
-    DFSUtils.save(ShutdownServer.serverInfoFile, host + ":" + port)
-  }
-
   def start {
     serverSocket.start
-
-    saveShutdownServerInfo
   }
 
   /**
@@ -116,36 +109,23 @@ class ShutdownServer(startPort: Int, maxRetries: Int, ssc: StreamingContext) ext
 }
 
 object ShutdownServer {
-  val checkpoitDir = ConfigUtils.getString("application.checkpoint", null)
 
-  if (checkpoitDir == null) throw new Exception("Property 'application.checkpoint' can not be null.")
-
-  private val serverInfoFile = {
-    new Path(checkpoitDir, "server_info").toString
+  def serverInfoFile(dir: String) = {
+    new Path(dir, "server_info").toString
   }
 
-  def shudownServerInfo(fs: FileSystem = FileSystem.get(new Configuration)) = {
-    val serverInfoStr = DFSUtils.read(ShutdownServer.serverInfoFile, 1, fs)(0)
+  def saveShutdownServerInfo(dir: String, server: ShutdownServer, fs: FileSystem = FileSystem.get(new Configuration)) {
+    val host = server.ssc.sparkContext.getConf.get("spark.driver.host")
+    val port = server.port
+    DFSUtils.save(serverInfoFile(dir), host + ":" + port)
+  }
+
+  def readShudownServerInfo(dir: String, fs: FileSystem = FileSystem.get(new Configuration)) = {
+    val serverInfoStr = DFSUtils.read(serverInfoFile(dir), 1, fs)(0)
     val Array(hostStr, portStr) = serverInfoStr.split(":")
     (hostStr, portStr.toInt)
   }
 
-}
-
-object ShutdownServerTest {
-  def main(args: Array[String]) {
-    val ssc = new StreamingContext(new SparkConf, Seconds(10))
-
-    val host = ssc.sparkContext.getConf.get("spark.driver.host")
-    val lines = ssc.socketTextStream(host, 9999)
-    lines.foreachRDD(rdd => rdd.foreach(println))
-
-    val shutdownServer = new ShutdownServer(7788, 10, ssc)
-    shutdownServer.start
-
-    ssc.start
-    ssc.awaitTermination
-  }
 }
 
 class SimpleSocketServer(func: Socket => Boolean, port: Int) {
@@ -189,4 +169,20 @@ class SimpleSocketServer(func: Socket => Boolean, port: Int) {
   sys.addShutdownHook({
     if (serverSocket != null) serverSocket.close
   })
+}
+
+object ShutdownServerTest {
+  def main(args: Array[String]) {
+    val ssc = new StreamingContext(new SparkConf, Seconds(10))
+
+    val host = ssc.sparkContext.getConf.get("spark.driver.host")
+    val lines = ssc.socketTextStream(host, 9999)
+    lines.foreachRDD(rdd => rdd.foreach(println))
+
+    val shutdownServer = new ShutdownServer(7788, 10, ssc)
+    shutdownServer.start
+
+    ssc.start
+    ssc.awaitTermination
+  }
 }

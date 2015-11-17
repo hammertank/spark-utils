@@ -4,11 +4,18 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.EOFException
 import java.net.Socket
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
+import my.spark.util.ConfigUtils
 
 object ShutdownClient {
+
+  val checkpointDir = ConfigUtils.getString("application.checkpoint", null)
+
+  if (checkpointDir == null) {
+    throw new Exception("Property 'application.checkpoint' cannot be null")
+  }
+
   def main(args: Array[String]) {
 
     var cmd = ""
@@ -27,7 +34,7 @@ object ShutdownClient {
     val conf = new Configuration
     conf.set("fs.hdfs.impl", "org.apache.hadoop.hdfs.DistributedFileSystem")
 
-    val (host, port) = ShutdownServer.shudownServerInfo(FileSystem.get(conf))
+    val (host, port) = ShutdownServer.readShudownServerInfo(checkpointDir, FileSystem.get(conf))
     val client = new SimpleSocketClient(host, port)
 
     println(s"Send command '${cmd}' to ${host}:${port}.")

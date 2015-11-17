@@ -49,6 +49,7 @@ trait KafkaApp extends Logging {
     ssc_ = StreamingContext.getOrCreate(checkPointDir, createContext)
 
     val shutdownServer = new ShutdownServer(shutdownPort, maxRetries, ssc)
+    ShutdownServer.saveShutdownServerInfo(checkPointDir, shutdownServer)
     shutdownServer.start
 
     ssc.start()
