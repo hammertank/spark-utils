@@ -1,22 +1,25 @@
 package my.spark.streaming
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
-import org.apache.spark.SparkConf
-import org.apache.spark.streaming.Seconds
-import org.apache.spark.streaming.StreamingContext
-import my.spark.socket.SimpleSocketServer
-import my.spark.util.ConfigUtils
-import my.spark.util.DFSUtils
-import org.apache.hadoop.fs.FileSystem
-import org.apache.spark.Logging
-import my.spark.socket.SimpleSocketServer
-import java.net.BindException
-import my.spark.socket.SimpleSocketServer
-import my.spark.socket.SimpleSocketServer
-import java.net.Socket
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.net.BindException
+import java.net.ServerSocket
+import java.net.Socket
+import java.net.SocketException
+
+import scala.actors.Actor
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.Path
+import org.apache.spark.Logging
+import org.apache.spark.SparkConf
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.streaming.Seconds
+import org.apache.spark.streaming.StreamingContext
+
+import my.spark.util.ConfigUtils
+import my.spark.util.DFSUtils
 
 class ShutdownServer(startPort: Int, maxRetries: Int, ssc: StreamingContext) extends Logging {
 
@@ -143,4 +146,47 @@ object ShutdownServerTest {
     ssc.start
     ssc.awaitTermination
   }
+}
+
+class SimpleSocketServer(func: Socket => Boolean, port: Int) {
+
+  val serverSocket = new ServerSocket(port)
+
+  var started = false
+
+  def handle(socket: Socket) = func(socket)
+
+  def start() = synchronized {
+    if (!started) {
+      Actor.actor {
+        @volatile var stop = false
+        while (!stop) {
+          try {
+            val socket = serverSocket.accept()
+
+            Actor.actor {
+              try {
+                val ret = handle(socket)
+                if (ret) {
+                  stop = ret
+                }
+              } finally {
+                socket.close
+              }
+            }
+          } catch {
+            case e: SocketException =>
+          }
+        }
+
+        serverSocket.close()
+      }
+
+      started = true
+    }
+  }
+
+  sys.addShutdownHook({
+    if (serverSocket != null) serverSocket.close
+  })
 }

@@ -1,10 +1,10 @@
-package my.spark.socket
+package my.spark.streaming
 
-import org.scalatest.Finders
-import org.scalatest.FunSuite
-import java.net.Socket
-import java.io.DataOutputStream
 import java.io.DataInputStream
+import java.io.DataOutputStream
+import java.net.Socket
+
+import org.scalatest.FunSuite
 
 class SimpleSocketSuite extends FunSuite {
 
