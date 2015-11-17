@@ -5,7 +5,7 @@ import com.typesafe.config.ConfigFactory
 import org.apache.spark.Logging
 
 /**
- * @author zhouyifan
+ * @author hammertank
  *
  */
 object ConfigUtils extends Logging {

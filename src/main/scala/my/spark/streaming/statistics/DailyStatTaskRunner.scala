@@ -6,7 +6,7 @@ import redis.clients.jedis.Jedis
 import my.spark.util.DateUtils
 
 /**
- * @author zhouyifan
+ * @author hammertank
  *
  * @param <K>
  * @param <V>

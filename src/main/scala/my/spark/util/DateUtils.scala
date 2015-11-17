@@ -5,7 +5,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 
 /**
- * @author zhouyifan
+ * @author hammertank
  *
  */
 object DateUtils {

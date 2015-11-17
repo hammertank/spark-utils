@@ -10,7 +10,7 @@ import org.apache.spark.rdd.EmptyRDD
 import java.sql.Statement
 
 /**
- * @author zhouyifan
+ * @author hammertank
  *
  */
 object Importer {

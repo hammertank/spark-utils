@@ -13,7 +13,7 @@ import my.spark.util.RedisConnectionPool
 import redis.clients.jedis.Jedis
 
 /**
- * @author zhouyifan
+ * @author hammertank
  *
  * Run statistic tasks and save task results to Redis
  *

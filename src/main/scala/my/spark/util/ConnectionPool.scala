@@ -6,7 +6,7 @@ import com.typesafe.config.ConfigFactory
 import com.alibaba.druid.pool.DruidPooledConnection
 
 /**
- * @author zhouyifan
+ * @author hammertank
  *
  */
 object ConnectionPool {

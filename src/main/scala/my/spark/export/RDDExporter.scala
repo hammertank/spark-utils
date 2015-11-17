@@ -7,7 +7,7 @@ import redis.clients.jedis.Jedis
 import my.spark.util.RedisConnectionPool
 
 /**
- * @author zhouyifan
+ * @author hammertank
  *
  * Export RDD to different kinds of storage
  *

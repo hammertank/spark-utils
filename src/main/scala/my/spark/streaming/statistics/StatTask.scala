@@ -6,7 +6,7 @@ import my.spark.util.SerdeUtils
 import redis.clients.jedis.Jedis
 
 /**
- * @author zhouyifan
+ * @author hammertank
  *
  * A statistic task
  *
