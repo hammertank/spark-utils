@@ -65,7 +65,7 @@ abstract class StatTask[A, B, C] extends Serializable {
    * @param key key of data in Redis
    * @return data
    */
-  def recover(jedis: Jedis)(key: String): B = {
+  def recover(jedis: Jedis, key: String): B = {
     val redisKey = key.getBytes("utf-8")
 
     val byteArray = jedis.hget(redisKey, recoverField)

@@ -63,10 +63,10 @@ object RDDExporter {
    *
    * @param f a function which can store an instance of `U` into Redis with a `Jedis` object
    */
-  def exportToRedis[U](rdd: RDD[U], f: Jedis => U => Unit) {
+  def exportToRedis[U](rdd: RDD[U], f: (Jedis, U) => Unit) {
     rdd.foreachPartition(partitionIterator => {
       val jedis = RedisConnectionPool.borrowConnection()
-      partitionIterator.foreach(f(jedis))
+      partitionIterator.foreach(f(jedis, _))
       RedisConnectionPool.returnConnection(jedis)
     })
   }

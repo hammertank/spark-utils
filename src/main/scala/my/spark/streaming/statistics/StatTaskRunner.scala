@@ -87,7 +87,7 @@ class StatTaskRunner[K, V](statTasks: List[StatTask[V, _, _]],
           val redisKey = keyForRedis(key)
           val jedis = RedisConnectionPool.borrowConnection()
           for (task <- statTasks) {
-            val recover = task.recover(jedis)(redisKey)
+            val recover = task.recover(jedis, redisKey)
             newMap.put(task, task.run(seq, recover))
           }
           RedisConnectionPool.returnConnection(jedis)
@@ -102,7 +102,7 @@ class StatTaskRunner[K, V](statTasks: List[StatTask[V, _, _]],
    * @param jedis a Redis connection
    * @param stat data to be saved
    */
-  protected def save(jedis: Jedis)(stat: (K, Map[StatTask[V, _, _], Any])) {
+  protected def save(jedis: Jedis, stat: (K, Map[StatTask[V, _, _], Any])) {
 
     stat._2.foreach {
       case (key, value) => {

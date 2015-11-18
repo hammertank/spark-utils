@@ -52,8 +52,8 @@ class DailyStatTaskRunner[K, V](statTasks: List[StatTask[V, _, _]],
     }
   }
 
-  override protected def save(jedis: Jedis)(stat: (K, Map[StatTask[V, _, _], Any])) {
-    super.save(jedis)(stat)
+  override protected def save(jedis: Jedis, stat: (K, Map[StatTask[V, _, _], Any])) {
+    super.save(jedis, stat)
 
     jedis.expire(keyForRedis(stat._1), DateUtils.secondsLeftToday())
   }
@@ -73,5 +73,5 @@ class DateRecorder[V] extends StatTask[V, String, Any] {
 
   override def save(jedis: Jedis)(record: (String, Any)) {}
 
-  override def recover(jedis: Jedis)(key: String) = initAccuData
+  override def recover(jedis: Jedis, key: String) = initAccuData
 }
