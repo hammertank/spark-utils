@@ -23,7 +23,7 @@ import redis.clients.jedis.Jedis
  * @param resolveKey func used to resolve record key from record value
  * @param keyForRedis func used to convert key to key in Redis
  */
-class StatTaskRunner[K, V](statTasks: List[StatTask[V, _, _]],
+class StatTaskExecutor[K, V](statTasks: List[StatTask[V, _, _]],
   resolveKey: V => K, keyForRedis: K => String)(implicit kt: ClassTag[K], vt: ClassTag[V]) extends Serializable {
 
   val isDebug = ConfigUtils.getBoolean("application.debug", false)

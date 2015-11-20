@@ -11,9 +11,9 @@ import my.spark.util.DateUtils
  * @param <K>
  * @param <V>
  */
-class DailyStatTaskRunner[K, V](statTasks: List[StatTask[V, _, _]],
+class DailyStatTaskExecutor[K, V](statTasks: List[StatTask[V, _, _]],
   resolveKey: V => K, keyForRedis: K => String)(implicit kt: ClassTag[K], vt: ClassTag[V])
-  extends StatTaskRunner[K, V](statTasks :+ new DateRecorder[V](), resolveKey, keyForRedis)(kt, vt) {
+  extends StatTaskExecutor[K, V](statTasks :+ new DateRecorder[V](), resolveKey, keyForRedis)(kt, vt) {
 
   override protected def accumulate(seq: Seq[V],
     accDataOpt: Option[Map[StatTask[V, _, _], Any]]): Option[Map[StatTask[V, _, _], Any]] = {
