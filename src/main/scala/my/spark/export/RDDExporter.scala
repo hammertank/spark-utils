@@ -1,10 +1,11 @@
 package my.spark.export
 
 import org.apache.spark.rdd.RDD
-import my.spark.util.ConnectionPool
-import org.apache.spark.Logging
+import my.spark.connection.ConnectionPool
+import my.spark.connection.JdbcConnectionPool
+import my.spark.connection.RedisConnectionPool
 import redis.clients.jedis.Jedis
-import my.spark.util.RedisConnectionPool
+import java.sql.Connection
 
 /**
  * @author hammertank
@@ -22,21 +23,21 @@ object RDDExporter {
    * @param deleteSQL a delete SQL which an be executed directly
    */
   def exportToRDB[U](dataRDD: RDD[U], insertSQL: U => String,
-    needDelete: Boolean = false, deleteSQL: String = "") {
+                     needDelete: Boolean = false, deleteSQL: String = "") {
     //Delete old data
     if (needDelete) {
-      val connection = ConnectionPool.borrowConnection
+      val connection = JdbcConnectionPool.borrowConnection
       connection.setAutoCommit(true)
       val stmt = connection.prepareStatement(deleteSQL)
       stmt.execute()
       stmt.close()
-      ConnectionPool.returnConnection(connection)
+      JdbcConnectionPool.returnConnection(connection)
     }
 
     //Insert new data
     dataRDD.foreachPartition {
       partitionIter =>
-        val connection = ConnectionPool.borrowConnection
+        val connection = JdbcConnectionPool.borrowConnection
         connection.setAutoCommit(false)
         val stmt = connection.createStatement
         var sqls = Array[String]()
@@ -53,7 +54,7 @@ object RDDExporter {
             throw new Exception("Error SQLs: " + sqls.toSet.toString, ex)
         } finally {
           stmt.close
-          ConnectionPool.returnConnection(connection)
+          JdbcConnectionPool.returnConnection(connection)
         }
     }
   }
@@ -64,10 +65,17 @@ object RDDExporter {
    * @param f a function which can store an instance of `U` into Redis with a `Jedis` object
    */
   def exportToRedis[U](rdd: RDD[U], f: (Jedis, U) => Unit) {
+    exportByPartition(rdd, RedisConnectionPool, f)
+  }
+
+  def exportByPartition[U, C](rdd: RDD[U], pool: ConnectionPool[C], f: (C, U) => Unit) {
     rdd.foreachPartition(partitionIterator => {
-      val jedis = RedisConnectionPool.borrowConnection()
-      partitionIterator.foreach(f(jedis, _))
-      RedisConnectionPool.returnConnection(jedis)
+      val connection = pool.borrowConnection
+      try {
+        partitionIterator.foreach(f(connection, _))
+      } finally {
+        pool.returnConnection(connection)
+      }
     })
   }
 }

@@ -6,43 +6,46 @@ import scala.reflect.ClassTag
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.dstream.DStream.toPairDStreamFunctions
 
+import my.spark.connection.ConnectionPool
+import my.spark.connection.KeyValConnection
 import my.spark.export.RDDExporter
 import my.spark.util.ConfigUtils
-import my.spark.util.RedisConnectionPool
-
-import redis.clients.jedis.Jedis
 
 /**
  * @author hammertank
  *
- * Run statistic tasks and save task results to Redis
+ * Run statistic tasks and save task results to external storage
  *
  * @param <K> record key type
  * @param <V> record value type
  * @param statTasks tasks need to run
  * @param resolveKey func used to resolve record key from record value
- * @param keyForRedis func used to convert key to key in Redis
+ * @param keyForStore func used to convert key to key in external storage
+ * @param connectionPool connection pool to get connection from
  */
 class StatTaskExecutor[K, V](statTasks: List[StatTask[V, _, _]],
-  resolveKey: V => K, keyForRedis: K => String)(implicit kt: ClassTag[K], vt: ClassTag[V]) extends Serializable {
+                             resolveKey: V => K,
+                             keyForStore: K => String,
+                             connectionPool: ConnectionPool[KeyValConnection])(implicit kt: ClassTag[K], vt: ClassTag[V])
+    extends Serializable {
 
   val isDebug = ConfigUtils.getBoolean("application.debug", false)
 
   /**
-   * Extract statistics info from  `dstream`
+   * Extract statistics info from  `dstream` and export to external storage
    *
    * @param dstream data source
    */
-  def run(dstream: DStream[V]) {
+  def execute(dstream: DStream[V]) {
 
     if (isDebug) {
-      println("StatTaskRunner.run:")
+      println("StatTaskExecutor.run:")
       statTasks.foreach(s => println(s.getClass.getName))
     }
 
     dstream.map {
       v => (resolveKey(v), v)
-    }.updateStateByKey(accumulate).foreachRDD(RDDExporter.exportToRedis(_, save))
+    }.updateStateByKey(accumulate).foreachRDD(RDDExporter.exportByPartition(_, connectionPool, save))
   }
 
   /**
@@ -55,7 +58,7 @@ class StatTaskExecutor[K, V](statTasks: List[StatTask[V, _, _]],
    * @return A new Map updated by `StatTask`s
    */
   protected def accumulate(seq: Seq[V],
-    accDataOpt: Option[Map[StatTask[V, _, _], Any]]): Option[Map[StatTask[V, _, _], Any]] = {
+                           accDataOpt: Option[Map[StatTask[V, _, _], Any]]): Option[Map[StatTask[V, _, _], Any]] = {
 
     if (isDebug) {
       println("StatTaskRunner.accumulate:")
@@ -84,29 +87,29 @@ class StatTaskExecutor[K, V](statTasks: List[StatTask[V, _, _]],
           None
         } else {
           val key = resolveKey(seq.head)
-          val redisKey = keyForRedis(key)
-          val jedis = RedisConnectionPool.borrowConnection()
+          val storeKey = keyForStore(key)
+          val conn = connectionPool.borrowConnection()
           for (task <- statTasks) {
-            val recover = task.recover(jedis, redisKey)
+            val recover = task.recover(conn, storeKey)
             newMap.put(task, task.run(seq, recover))
           }
-          RedisConnectionPool.returnConnection(jedis)
+          connectionPool.returnConnection(conn)
           Some(newMap)
         }
     }
   }
 
   /**
-   * Save data to redis
+   * Save data to external storage
    *
-   * @param jedis a Redis connection
+   * @param conn a external storage connection
    * @param stat data to be saved
    */
-  protected def save(jedis: Jedis, stat: (K, Map[StatTask[V, _, _], Any])) {
+  protected def save(conn: KeyValConnection, stat: (K, Map[StatTask[V, _, _], Any])) {
 
     stat._2.foreach {
       case (key, value) => {
-        key.save(jedis)(keyForRedis(stat._1), value)
+        key.save(conn, (keyForStore(stat._1), value))
       }
     }
   }

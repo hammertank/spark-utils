@@ -5,7 +5,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.JdbcRDD
 import org.apache.spark.rdd.RDD
-import my.spark.util.ConnectionPool
+import my.spark.connection.JdbcConnectionPool
 import org.apache.spark.rdd.EmptyRDD
 import java.sql.Statement
 
@@ -54,7 +54,7 @@ object Importer {
     if (keys.size == 0) {
       sc.emptyRDD
     } else {
-      new JdbcRDD(sc, () => ConnectionPool.borrowConnection, selectSQL, keys.min, keys.max, partNum, convertFunc)
+      new JdbcRDD(sc, () => JdbcConnectionPool.borrowConnection, selectSQL, keys.min, keys.max, partNum, convertFunc)
     }
   }
 
@@ -77,11 +77,11 @@ object Importer {
   }
 
   private def executeAction(func: (Statement) => _) {
-    val connection = ConnectionPool.borrowConnection
+    val connection = JdbcConnectionPool.borrowConnection
     val stmt = connection.createStatement()
     func(stmt)
     stmt.close()
-    ConnectionPool.returnConnection(connection)
+    JdbcConnectionPool.returnConnection(connection)
   }
 
 }

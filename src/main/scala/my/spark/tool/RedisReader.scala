@@ -1,6 +1,6 @@
 package my.spark.tool
 
-import my.spark.util.RedisConnectionPool
+import my.spark.connection.RedisConnectionPool
 import my.spark.util.SerdeUtils
 
 object RedisReader extends App {

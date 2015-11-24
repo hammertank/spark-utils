@@ -5,5 +5,5 @@ Some useful tools for apache spark application development.
 - **Import data to RDD through JDBC**
 - **Export RDD to RDBMS/Redis**
 - **Kafka Spark Streaming Driver Class**
-- **Stateful Task Runner and Interface**
+- **Stateful Task and TaskExecutor**
 - **Simple Socket Server to shutdown StreamingContext gracefully**
