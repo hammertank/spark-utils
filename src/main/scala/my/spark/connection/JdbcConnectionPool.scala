@@ -1,15 +1,14 @@
-package my.spark.util
+package my.spark.connection
 
 import java.sql.Connection
 import com.alibaba.druid.pool.DruidDataSource
 import com.typesafe.config.ConfigFactory
-import com.alibaba.druid.pool.DruidPooledConnection
 
 /**
  * @author hammertank
  *
  */
-object ConnectionPool {
+object JdbcConnectionPool extends ConnectionPool[Connection] {
 
   val JDBC_URL = "jdbc.url"
   val USERNAME = "jdbc.username"
@@ -30,11 +29,11 @@ object ConnectionPool {
     dataSource
   }
 
-  def borrowConnection: Connection = {
+  override def borrowConnection: Connection = {
     pool.getConnection
   }
 
-  def returnConnection(connection: Connection) {
+  override def returnConnection(connection: Connection) {
     connection.close
   }
 

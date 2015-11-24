@@ -1,22 +1,34 @@
 package my.spark.streaming.statistics
 
-import scala.reflect.ClassTag
 import scala.collection.mutable.Map
-import redis.clients.jedis.Jedis
+import scala.reflect.ClassTag
+
+import my.spark.connection.ConnectionPool
+import my.spark.connection.KeyValConnection
+import my.spark.connection.KeyValConnectionWithExpire
 import my.spark.util.DateUtils
 
 /**
  * @author hammertank
  *
+ * A StatTaskExecutor that will clean data both in dstream and external storage by key at the end  of the day
+ * 
+ * External storage need to support operations like `Jedis.expire(key: String, seconds: Int)` 
+ *
  * @param <K>
  * @param <V>
  */
 class DailyStatTaskExecutor[K, V](statTasks: List[StatTask[V, _, _]],
-  resolveKey: V => K, keyForRedis: K => String)(implicit kt: ClassTag[K], vt: ClassTag[V])
-  extends StatTaskExecutor[K, V](statTasks :+ new DateRecorder[V](), resolveKey, keyForRedis)(kt, vt) {
+                                  resolveKey: V => K,
+                                  keyForStore: K => String,
+                                  pool: ConnectionPool[KeyValConnectionWithExpire])(implicit kt: ClassTag[K], vt: ClassTag[V])
+    extends StatTaskExecutor[K, V](statTasks :+ new DateRecorder[V](),
+      resolveKey,
+      keyForStore,
+      pool.asInstanceOf[ConnectionPool[KeyValConnection]])(kt, vt) {
 
   override protected def accumulate(seq: Seq[V],
-    accDataOpt: Option[Map[StatTask[V, _, _], Any]]): Option[Map[StatTask[V, _, _], Any]] = {
+                                    accDataOpt: Option[Map[StatTask[V, _, _], Any]]): Option[Map[StatTask[V, _, _], Any]] = {
 
     val currentDate = DateUtils.fromTimestamp(System.currentTimeMillis())
     val newMap = Map[StatTask[V, _, _], Any]()
@@ -52,26 +64,26 @@ class DailyStatTaskExecutor[K, V](statTasks: List[StatTask[V, _, _]],
     }
   }
 
-  override protected def save(jedis: Jedis, stat: (K, Map[StatTask[V, _, _], Any])) {
-    super.save(jedis, stat)
+  override protected def save(conn: KeyValConnection, stat: (K, Map[StatTask[V, _, _], Any])) {
+    super.save(conn, stat)
 
-    jedis.expire(keyForRedis(stat._1), DateUtils.secondsLeftToday())
+    conn.asInstanceOf[KeyValConnectionWithExpire].expire(keyForStore(stat._1), DateUtils.secondsLeftToday())
   }
 
 }
 
 class DateRecorder[V] extends StatTask[V, String, Any] {
-  val valueField: Array[Byte] = null
+  val valueField: String = null
   def resolveValue(accuData: String): Any = null
 
-  val recoverField: Array[Byte] = null
+  val recoverField: String = null
   val initAccuData: String = ""
 
   protected def runInternal(seq: Seq[V], accuData: String): String = {
     DateUtils.fromTimestamp(System.currentTimeMillis())
   }
 
-  override def save(jedis: Jedis)(record: (String, Any)) {}
+  override def save(conn: KeyValConnection, record: (String, Any)) {}
 
-  override def recover(jedis: Jedis, key: String) = initAccuData
+  override def recover(conn: KeyValConnection, key: String) = initAccuData
 }
