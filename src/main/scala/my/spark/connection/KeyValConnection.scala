@@ -10,4 +10,6 @@ trait KeyValConnection {
 
 trait KeyValConnectionWithExpire extends KeyValConnection {
   def expire(key: String, seconds: Int)
+
+  def expire(key: Array[Byte], seconds: Int)
 }
