@@ -17,10 +17,10 @@ abstract class StatTask[A, B, C] extends Serializable {
 
   val isDebug = ConfigUtils.getBoolean("application.debug", false)
 
-  val valueField: String
+  val valueField: Array[Byte]
   def resolveValue(accuData: B): C
 
-  val recoverField: String
+  val recoverField: Array[Byte]
   val initAccuData: B
 
   def run(seq: Seq[A], accuData: Any) = {

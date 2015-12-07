@@ -73,10 +73,10 @@ class DailyStatTaskExecutor[K, V](statTasks: List[StatTask[V, _, _]],
 }
 
 class DateRecorder[V] extends StatTask[V, String, Any] {
-  val valueField: String = null
+  val valueField: Array[Byte] = null
   def resolveValue(accuData: String): Any = null
 
-  val recoverField: String = null
+  val recoverField: Array[Byte] = null
   val initAccuData: String = ""
 
   protected def runInternal(seq: Seq[V], accuData: String): String = {
