@@ -1,6 +1,6 @@
 package my.spark.streaming.statistics
 
-import scala.collection.mutable.Map
+import scala.collection.mutable.Set
 import scala.reflect.ClassTag
 
 import org.apache.spark.streaming.dstream.DStream
@@ -23,11 +23,10 @@ import my.spark.util.ConfigUtils
  * @param keyForStore func used to convert key to key in external storage
  * @param connectionPool connection pool to get connection from
  */
-class StatTaskExecutor[K, V](statTasks: List[StatTask[V, _, _]],
+class StatTaskExecutor[K, V](taskClasses: List[Class[_ <: StatTask[V, _, _]]],
                              resolveKey: V => K,
                              keyForStore: K => String,
-                             connectionPool: ConnectionPool[KeyValConnection])(implicit kt: ClassTag[K], vt: ClassTag[V])
-    extends Serializable {
+                             connectionPool: ConnectionPool[KeyValConnection])(implicit kt: ClassTag[K], vt: ClassTag[V]) extends Serializable {
 
   val isDebug = ConfigUtils.getBoolean("application.debug", false)
 
@@ -36,11 +35,11 @@ class StatTaskExecutor[K, V](statTasks: List[StatTask[V, _, _]],
    *
    * @param dstream data source
    */
-  def execute(dstream: DStream[V]) {
+  def run(dstream: DStream[V]) {
 
     if (isDebug) {
-      println("StatTaskExecutor.run:")
-      statTasks.foreach(s => println(s.getClass.getName))
+      println("StatTaskRunner.run:")
+      taskClasses.foreach(s => println(s.getName))
     }
 
     dstream.map {
@@ -54,34 +53,32 @@ class StatTaskExecutor[K, V](statTasks: List[StatTask[V, _, _]],
    * This method is a parameter of `PairDStreamFunctions.updateStateByKey`
    *
    * @param seq new incoming data
-   * @param accDataOpt A Map whose keys are `StatTask`s and the values are the data to be processed by its key
-   * @return A new Map updated by `StatTask`s
+   * @param accDataOpt Set of `StatTask`s
+   * @return A new Set of `StatTask`s
    */
   protected def accumulate(seq: Seq[V],
-                           accDataOpt: Option[Map[StatTask[V, _, _], Any]]): Option[Map[StatTask[V, _, _], Any]] = {
+                           taskSetOpt: Option[Set[StatTask[V, _, _]]]): Option[Set[StatTask[V, _, _]]] = {
 
     if (isDebug) {
       println("StatTaskRunner.accumulate:")
 
-      if (!accDataOpt.isEmpty)
-        println("Map hash code: " + accDataOpt.get.hashCode())
+      if (!taskSetOpt.isEmpty)
+        println("Map hash code: " + taskSetOpt.get.hashCode())
 
       if (seq.length != 0) {
         println("Key: " + resolveKey(seq.head))
       }
     }
 
-    val newMap = Map[StatTask[V, _, _], Any]()
+    val newSet = Set[StatTask[V, _, _]]()
 
-    accDataOpt match {
-      case Some(accMap) =>
-        for (entry <- accMap) {
-          val task = entry._1
-          val data = entry._2
-          newMap(task) = task.run(seq, data)
+    taskSetOpt match {
+      case Some(taskSet) =>
+        for (task <- taskSet) {
+          task.run(seq)
         }
 
-        Some(newMap)
+        Some(taskSet)
       case None =>
         if (seq.length == 0) {
           None
@@ -89,12 +86,14 @@ class StatTaskExecutor[K, V](statTasks: List[StatTask[V, _, _]],
           val key = resolveKey(seq.head)
           val storeKey = keyForStore(key)
           val conn = connectionPool.borrowConnection()
-          for (task <- statTasks) {
-            val recover = task.recover(conn, storeKey)
-            newMap.put(task, task.run(seq, recover))
+          for (taskClass <- taskClasses) {
+            val constructor = taskClass.getDeclaredConstructor(classOf[String])
+            val task = constructor.newInstance(storeKey)
+            task.recover(conn).run(seq)
+            newSet += task
           }
           connectionPool.returnConnection(conn)
-          Some(newMap)
+          Some(newSet)
         }
     }
   }
@@ -105,12 +104,9 @@ class StatTaskExecutor[K, V](statTasks: List[StatTask[V, _, _]],
    * @param conn a external storage connection
    * @param stat data to be saved
    */
-  protected def save(conn: KeyValConnection, stat: (K, Map[StatTask[V, _, _], Any])) {
-
+  protected def save(conn: KeyValConnection, stat: (K, Set[StatTask[V, _, _]])) {
     stat._2.foreach {
-      case (key, value) => {
-        key.save(conn, (keyForStore(stat._1), value))
-      }
+      task => task.save(conn)
     }
   }
 }

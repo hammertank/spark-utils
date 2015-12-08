@@ -2,7 +2,7 @@ package my.spark.connection
 
 import redis.clients.jedis.Jedis
 
-class KeyValConnectionImpl(jedis: Jedis) extends KeyValConnectionWithExpire {
+class KeyValConnectionImpl(jedis: Jedis) extends KeyValConnection {
   override def get(key: Array[Byte], field: Array[Byte]): Array[Byte] = {
     jedis.hget(key, field)
   }

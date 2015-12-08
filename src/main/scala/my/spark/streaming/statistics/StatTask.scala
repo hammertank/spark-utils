@@ -13,7 +13,9 @@ import my.spark.connection.KeyValConnection
  * @param <B> Middle result data type
  * @param <C> Output result data type
  */
-abstract class StatTask[A, B, C] extends Serializable {
+abstract class StatTask[A, B, C](storeKey: String) extends Serializable {
+
+  val storeKeyBytes = storeKey.getBytes("utf-8");
 
   val isDebug = ConfigUtils.getBoolean("application.debug", false)
 
@@ -23,8 +25,16 @@ abstract class StatTask[A, B, C] extends Serializable {
   val recoverField: Array[Byte]
   val initAccuData: B
 
-  def run(seq: Seq[A], accuData: Any) = {
-    runInternal(seq, cast(accuData))
+  private[statistics] var data: B = _
+  private[statistics] var isDataChanged: Boolean = true
+
+  def run(seq: Seq[A]) {
+    if (seq.length > 0) {
+      data = runInternal(seq, data)
+      isDataChanged = true
+    } else {
+      isDataChanged = false
+    }
   }
 
   private def cast(accuData: Any): B = {
@@ -46,34 +56,40 @@ abstract class StatTask[A, B, C] extends Serializable {
    * @param conn a external storage connection
    * @param record data to save
    */
-  def save(conn: KeyValConnection, record: (String, Any)) {
-    val storeKey = record._1.getBytes("utf-8")
-    val value = resolveValue(cast(record._2)).toString().getBytes("utf-8")
-    val recover = SerdeUtils.convertToByteArray(record._2)
+  def save(conn: KeyValConnection) {
+    if (isDataChanged) {
+      val storeKey = this.storeKey.getBytes("utf-8")
+      val value = resolveValue(data).toString().getBytes("utf-8")
+      val recover = SerdeUtils.convertToByteArray(data)
 
-    conn.put(storeKey, valueField, value)
-    conn.put(storeKey, recoverField, recover)
+      conn.put(storeKey, valueField, value)
+      conn.put(storeKey, recoverField, recover)
+    }
   }
 
   /**
    * fetch data from external storage
-   * This method is called to recover data
-   * from an update of the application
+   * This method is called to recover data of `StatTask`
    *
    * @param conn a external storage connection
    * @param key key of data in external storage
-   * @return data
+   * @return `StatTask` itself
    */
-  def recover(conn: KeyValConnection, key: String): B = {
-    val storeKey = key.getBytes("utf-8")
-
-    val byteArray = conn.get(storeKey, recoverField)
+  def recover(conn: KeyValConnection): this.type = {
+    val byteArray = conn.get(storeKeyBytes, recoverField)
 
     if (byteArray == null) {
-      initAccuData
+      data = initAccuData
     } else {
-      cast(SerdeUtils.convertFromByteArray(byteArray))
+      data = cast(SerdeUtils.convertFromByteArray(byteArray))
     }
+
+    this
+  }
+
+  def reset(): this.type = {
+    data = initAccuData
+    this
   }
 
 }
