@@ -52,7 +52,7 @@ class DailyStatTaskExecutor[K, V](statTasks: List[_ <: Class[StatTask[V, _, _]]]
         } else if (seq.length != 0) { // Step into new day with new data. Reset `accuData`. Then accumulate.
           if (isDebug) println("Reset and Accumulate...")
           taskSet.foreach(task => task.reset())
-          super.accumulate(seq, Some(newTask))
+          super.accumulate(seq, Some(taskSet))
         } else { // Step into new day without new data. Eliminate the key-value pair
           if (isDebug) println("Eliminate...")
           None
