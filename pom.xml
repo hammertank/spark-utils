@@ -14,6 +14,7 @@
 		<jedis.version>2.7.2</jedis.version>
 		<scalatest_2.10.version>2.2.1</scalatest_2.10.version>
 		<hadoop.version>2.5.0</hadoop.version>
+		<hbase.version>0.98.6-hadoop2</hbase.version>
 	</properties>
 
 	<build>
@@ -157,6 +158,12 @@
 			<artifactId>scala-actors</artifactId>
 			<version>${scala.version}</version>
 			<scope>compile</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.hbase</groupId>
+			<artifactId>hbase-client</artifactId>
+			<version>${hbase.version}</version>
+			<scope>provided</scope>
 		</dependency>
 	</dependencies>
 </project>

@@ -2,43 +2,40 @@ package my.spark.streaming.statistics
 
 import scala.collection.mutable.Set
 import scala.reflect.ClassTag
-
 import my.spark.connection.ConnectionPool
 import my.spark.connection.KeyValConnection
 import my.spark.util.DateUtils
+import my.spark.connection.KeyValConnectionWithExpire
 
 /**
  * @author hammertank
  *
- * A StatTaskExecutor that will clean data both in dstream and external storage by key at the end  of the day
+ * A StatTaskExecutor that will renew `StatTask`s in dstream at the beginning  of a day.
  *
- * External storage need to support operations like `Jedis.expire(key: String, seconds: Int)`
+ * If external storage supports operations like `Jedis.expire(key: String, seconds: Int)`,
+ * implement trait `KeyValConnectionWithExpire` and use it here to let records older than
+ * one day expire in external storage.
  *
  * @param <K>
  * @param <V>
  */
-class DailyStatTaskExecutor[K, V](statTasks: List[_ <: Class[StatTask[V, _, _]]],
-                                  resolveKey: V => K,
-                                  keyForStore: K => String,
-                                  pool: ConnectionPool[KeyValConnection])(implicit kt: ClassTag[K], vt: ClassTag[V])
-    extends StatTaskExecutor[K, V](statTasks :+ classOf[DateRecorder[V]],
-      resolveKey,
-      keyForStore,
-      pool.asInstanceOf[ConnectionPool[KeyValConnection]])(kt, vt) {
+class DailyStatTaskExecutor[V](statTasks: List[Class[_ <: StatTask[V, _, _]]],
+                               resolveKey: V => String,
+                               pool: ConnectionPool[KeyValConnection])(implicit vt: ClassTag[V])
+    extends StatTaskExecutor[V](statTasks :+ classOf[DateRecorder[V]], resolveKey, pool)(vt) {
 
   override protected def accumulate(seq: Seq[V],
-                                    taskSetOpt: Option[Set[StatTask[V, _, _]]]): Option[Set[StatTask[V, _, _]]] = {
+                                    taskListOpt: Option[List[StatTask[V, _, _]]]): Option[List[StatTask[V, _, _]]] = {
 
     val currentDate = DateUtils.fromTimestamp(System.currentTimeMillis())
-    val newTask = Set[StatTask[V, _, _]]()
 
     if (isDebug) {
-      println("DailyStatTaskRunner.accumulate:")
+      println("DailyStatTaskExecutor.accumulate:")
     }
 
-    taskSetOpt match {
-      case Some(taskSet) =>
-        val date = taskSet.filter(task => task.isInstanceOf[DateRecorder[V]])
+    taskListOpt match {
+      case Some(tasList) =>
+        val date = tasList.filter(task => task.isInstanceOf[DateRecorder[V]])
           .head.data
 
         if (isDebug) {
@@ -48,50 +45,60 @@ class DailyStatTaskExecutor[K, V](statTasks: List[_ <: Class[StatTask[V, _, _]]]
 
         if (date == currentDate) { //In the same day, just accumulate data.
           if (isDebug) println("Accumulate...")
-          super.accumulate(seq, taskSetOpt)
-        } else if (seq.length != 0) { // Step into new day with new data. Reset `accuData`. Then accumulate.
-          if (isDebug) println("Reset and Accumulate...")
-          taskSet.foreach(task => task.reset())
-          super.accumulate(seq, Some(taskSet))
+          super.accumulate(seq, taskListOpt)
+        } else if (seq.length != 0) { // Step into new day with new data. Clean old `StatTask`s. Then accumulate.
+          if (isDebug) println("Clean and Accumulate...")
+          super.accumulate(seq, None)
         } else { // Step into new day without new data. Eliminate the key-value pair
           if (isDebug) println("Eliminate...")
           None
         }
       case None =>
         if (isDebug) println("accDataOpt == None")
-        super.accumulate(seq, taskSetOpt)
+        super.accumulate(seq, taskListOpt)
     }
   }
 }
 
-private[statistics] class DateRecorder[V](storeKey: String) extends StatTask[V, String, String](storeKey) {
+/**
+ * @author hammertank
+ *
+ * Record the execution date and set the expire time of `key`.
+ * `key` must expire at the end of a day.
+ *
+ * @param <V>
+ */
+private[statistics] class DateRecorder[V](key: String) extends StatTask[V, String, String](key) {
   val valueField: Array[Byte] = null
   def resolveValue(accuData: String): String = null
 
   val recoverField: Array[Byte] = null
   val initAccuData: String = ""
+  //Fields above have no use in this class.
 
-  private var isDateChanged = true
-  protected def runInternal(seq: Seq[V], accuData: String): String = {
-    val current = DateUtils.fromTimestamp(System.currentTimeMillis())
+  private var expireIsSet = false
 
-    if (current != data) {
-      isDateChanged = true;
-    } else {
-      isDateChanged = false
-    }
+  // `data` represents the date this object created
+  data = DateUtils.fromTimestamp(System.currentTimeMillis())
 
-    current
-  }
+  // Do nothing
+  override def runInternal(seq: Seq[V], accuData: String) = data
 
+  /**
+   * Set expire time of `key`.
+   *
+   * Only need to do once.
+   *
+   */
   override def save(conn: KeyValConnection) {
-    if (isDateChanged) {
-      conn.expire(storeKey, DateUtils.secondsLeftToday())
+    if (!expireIsSet && conn.isInstanceOf[KeyValConnectionWithExpire]) {
+      conn.asInstanceOf[KeyValConnectionWithExpire].expire(key, DateUtils.secondsLeftToday())
+      expireIsSet = true
     }
   }
 
+  // Override to avoid read from external storage
   override def recover(conn: KeyValConnection) = {
-    data = initAccuData
     this
   }
 }

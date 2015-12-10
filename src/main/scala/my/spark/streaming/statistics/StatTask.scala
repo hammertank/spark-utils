@@ -13,9 +13,9 @@ import my.spark.connection.KeyValConnection
  * @param <B> Middle result data type
  * @param <C> Output result data type
  */
-abstract class StatTask[A, B, C](storeKey: String) extends Serializable {
+abstract class StatTask[A, B, C](key: String) extends Serializable {
 
-  val storeKeyBytes = storeKey.getBytes("utf-8");
+  val keyBytes = key.getBytes("utf-8");
 
   val isDebug = ConfigUtils.getBoolean("application.debug", false)
 
@@ -58,12 +58,11 @@ abstract class StatTask[A, B, C](storeKey: String) extends Serializable {
    */
   def save(conn: KeyValConnection) {
     if (isDataChanged) {
-      val storeKey = this.storeKey.getBytes("utf-8")
       val value = resolveValue(data).toString().getBytes("utf-8")
       val recover = SerdeUtils.convertToByteArray(data)
 
-      conn.put(storeKey, valueField, value)
-      conn.put(storeKey, recoverField, recover)
+      conn.put(keyBytes, valueField, value)
+      conn.put(keyBytes, recoverField, recover)
     }
   }
 
@@ -76,7 +75,7 @@ abstract class StatTask[A, B, C](storeKey: String) extends Serializable {
    * @return `StatTask` itself
    */
   def recover(conn: KeyValConnection): this.type = {
-    val byteArray = conn.get(storeKeyBytes, recoverField)
+    val byteArray = conn.get(keyBytes, recoverField)
 
     if (byteArray == null) {
       data = initAccuData
@@ -86,10 +85,4 @@ abstract class StatTask[A, B, C](storeKey: String) extends Serializable {
 
     this
   }
-
-  def reset(): this.type = {
-    data = initAccuData
-    this
-  }
-
 }

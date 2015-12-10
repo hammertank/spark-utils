@@ -20,13 +20,11 @@ import my.spark.util.ConfigUtils
  * @param <V> record value type
  * @param statTasks tasks need to run
  * @param resolveKey func used to resolve record key from record value
- * @param keyForStore func used to convert key to key in external storage
  * @param connectionPool connection pool to get connection from
  */
-class StatTaskExecutor[K, V](taskClasses: List[Class[_ <: StatTask[V, _, _]]],
-                             resolveKey: V => K,
-                             keyForStore: K => String,
-                             connectionPool: ConnectionPool[KeyValConnection])(implicit kt: ClassTag[K], vt: ClassTag[V]) extends Serializable {
+class StatTaskExecutor[V](taskClasses: List[Class[_ <: StatTask[V, _, _]]],
+                          resolveKey: V => String,
+                          connectionPool: ConnectionPool[KeyValConnection])(implicit vt: ClassTag[V]) extends Serializable {
 
   val isDebug = ConfigUtils.getBoolean("application.debug", false)
 
@@ -53,47 +51,46 @@ class StatTaskExecutor[K, V](taskClasses: List[Class[_ <: StatTask[V, _, _]]],
    * This method is a parameter of `PairDStreamFunctions.updateStateByKey`
    *
    * @param seq new incoming data
-   * @param accDataOpt Set of `StatTask`s
-   * @return A new Set of `StatTask`s
+   * @param accDataOpt List of `StatTask`s
+   * @return A new List of `StatTask`s
    */
   protected def accumulate(seq: Seq[V],
-                           taskSetOpt: Option[Set[StatTask[V, _, _]]]): Option[Set[StatTask[V, _, _]]] = {
+                           taskListOpt: Option[List[StatTask[V, _, _]]]): Option[List[StatTask[V, _, _]]] = {
 
     if (isDebug) {
       println("StatTaskRunner.accumulate:")
 
-      if (!taskSetOpt.isEmpty)
-        println("Map hash code: " + taskSetOpt.get.hashCode())
+      if (!taskListOpt.isEmpty)
+        println("Map hash code: " + taskListOpt.get.hashCode())
 
       if (seq.length != 0) {
         println("Key: " + resolveKey(seq.head))
       }
     }
 
-    val newSet = Set[StatTask[V, _, _]]()
-
-    taskSetOpt match {
-      case Some(taskSet) =>
-        for (task <- taskSet) {
+    taskListOpt match {
+      case Some(taskList) =>
+        for (task <- taskList) {
           task.run(seq)
         }
 
-        Some(taskSet)
+        Some(taskList)
       case None =>
         if (seq.length == 0) {
           None
         } else {
           val key = resolveKey(seq.head)
-          val storeKey = keyForStore(key)
           val conn = connectionPool.borrowConnection()
-          for (taskClass <- taskClasses) {
+
+          val newList = taskClasses.map { taskClass =>
             val constructor = taskClass.getDeclaredConstructor(classOf[String])
-            val task = constructor.newInstance(storeKey)
+            val task = constructor.newInstance(key)
             task.recover(conn).run(seq)
-            newSet += task
+            task
           }
+
           connectionPool.returnConnection(conn)
-          Some(newSet)
+          Some(newList)
         }
     }
   }
@@ -104,7 +101,7 @@ class StatTaskExecutor[K, V](taskClasses: List[Class[_ <: StatTask[V, _, _]]],
    * @param conn a external storage connection
    * @param stat data to be saved
    */
-  protected def save(conn: KeyValConnection, stat: (K, Set[StatTask[V, _, _]])) {
+  protected def save(conn: KeyValConnection, stat: (String, List[StatTask[V, _, _]])) {
     stat._2.foreach {
       task => task.save(conn)
     }

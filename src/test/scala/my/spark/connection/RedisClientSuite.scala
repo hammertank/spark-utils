@@ -1,7 +1,6 @@
-package my.spark.util
+package my.spark.connection
 
 import org.scalatest.FunSuite
-import my.spark.connection.RedisConnectionPool
 
 class RedisClientSuite extends FunSuite {
 
