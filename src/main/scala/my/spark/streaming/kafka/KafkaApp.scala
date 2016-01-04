@@ -1,16 +1,21 @@
-package my.spark.streaming.kafka
+package com.melot.spark.streaming.kafka
 
 import org.apache.spark.Logging
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.streaming.Seconds
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.kafka.KafkaUtils
-
-import my.spark.streaming.ShutdownServer
+import kafka.serializer.StringDecoder
+import org.apache.spark.streaming.kafka.HasOffsetRanges
+import org.I0Itec.zkclient.ZkClient
+import kafka.message.MessageAndMetadata
+import kafka.message.MessageAndMetadata
 import my.spark.util.ConfigUtils
+import my.spark.streaming.ShutdownServer
+import my.spark.streaming.kafka.ZKUtils
 
 trait KafkaApp extends Logging {
   val BATCH_DURATION = "application.batch.duration"
@@ -31,13 +36,18 @@ trait KafkaApp extends Logging {
 
   val KAFKA_ZK_ADDRESS = "kafka.zk.address"
   val KAFKA_GROUP_ID = "kafka.group.id"
-  val KAFKA_TOPICS = "kafka.topics"
-  val KAFKA_THREADS_PER_TOPIC = "kafka.threads.per.topic"
+  //  val KAFKA_TOPICS = "kafka.topics"
+  //  val KAFKA_THREADS_PER_TOPIC = "kafka.threads.per.topic"
+  //
+  //  val zkQuorum = ConfigUtils.getString(KAFKA_ZK_ADDRESS, "localhost:2181")
+  //  val groupId = ConfigUtils.getString(KAFKA_GROUP_ID, "defalut")
+  //  val numThreads = ConfigUtils.getInt(KAFKA_THREADS_PER_TOPIC, 1)
 
-  val zkQuorum = ConfigUtils.getString(KAFKA_ZK_ADDRESS, "localhost:2181")
-  val group = ConfigUtils.getString(KAFKA_GROUP_ID, "defalut")
-  val topics = ConfigUtils.getString(KAFKA_TOPICS, "defalut")
-  val numThreads = ConfigUtils.getInt(KAFKA_THREADS_PER_TOPIC, 1)
+  val KAFKA_BROKER_LIST = "kafka.metadata.broker.list"
+  val KAFKA_TOPICS = "kafka.topics"
+
+  val brokerList = ConfigUtils.getString(KAFKA_BROKER_LIST, "localhost:2181")
+  val topics = ConfigUtils.getString(KAFKA_TOPICS, "defalut").split(",").map { x => x.trim() }.toSet
 
   val isDebug = ConfigUtils.getBoolean("application.debug", false)
 
@@ -49,7 +59,6 @@ trait KafkaApp extends Logging {
     ssc_ = StreamingContext.getOrCreate(checkPointDir, createContext)
 
     val shutdownServer = new ShutdownServer(shutdownPort, maxRetries, ssc)
-    ShutdownServer.saveShutdownServerInfo(checkPointDir, shutdownServer)
     shutdownServer.start
 
     ssc.start()
@@ -60,12 +69,32 @@ trait KafkaApp extends Logging {
     val sparkConf = new SparkConf()
     val ssc = new StreamingContext(sparkConf, Seconds(batchDuration))
 
-    val topicMap = topics.split(",").map((_, numThreads)).toMap
+    //    val topicMap = topics.split(",").map((_, numThreads)).toMap
+    //
+    //    logInfo("Create Kafka Consumer with properteis: zookeeper=%s group=%s topics=%s".format(zkQuorum, group, topics))
+    //    val recordDstream = KafkaUtils.createStream(ssc, zkQuorum, group, topicMap, StorageLevel.MEMORY_AND_DISK_SER)
 
-    logInfo("Create Kafka Consumer with properteis: zookeeper=%s group=%s topics=%s".format(zkQuorum, group, topics))
-    val recordDstream = KafkaUtils.createStream(ssc, zkQuorum, group, topicMap, StorageLevel.MEMORY_AND_DISK_SER)
+    val kafkaParams = Map[String, String]("metadata.broker.list" -> brokerList)
+
+    val zkQuorum = ConfigUtils.getString(KAFKA_ZK_ADDRESS, "localhost:2181")
+    val groupId = ConfigUtils.getString(KAFKA_GROUP_ID, "defalut")
+    val zkClient = ZKUtils.createZKClient(zkQuorum)
+    val fromOffsets = ZKUtils.fetchLastOffsets(zkClient, groupId)
+
+    logInfo(s"Create DirectKafkaInputDStream with properties: $KAFKA_ZK_ADDRESS=$zkQuorum $KAFKA_GROUP_ID=$groupId $KAFKA_BROKER_LIST=$brokerList $KAFKA_TOPICS=$topics")
+    val recordDstream = if (fromOffsets.isDefined) {
+      KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder, (String, String)](ssc, kafkaParams, fromOffsets.get, (mmd: MessageAndMetadata[String, String]) => (mmd.key, mmd.message))
+    } else {
+      KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](ssc, kafkaParams, topics)
+    }
 
     compute(recordDstream)
+
+    recordDstream.foreachRDD { rdd =>
+      val zkClient = ZKUtils.createZKClient(zkQuorum)
+      val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
+      ZKUtils.updateLastOffsets(zkClient, groupId, offsetRanges)
+    }
 
     ssc.checkpoint(checkPointDir)
     ssc
@@ -73,4 +102,11 @@ trait KafkaApp extends Logging {
 
   //Subclasses need to override it 
   def compute(recordDStream: DStream[(String, String)])
+}
+
+object KafkaAppTest extends KafkaApp {
+
+  override def compute(dstream: DStream[(String, String)]) {
+    dstream.foreachRDD(rdd => rdd.foreach(println))
+  }
 }
