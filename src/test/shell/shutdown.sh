@@ -13,4 +13,4 @@ done
 #export HADOOP_CONF_DIR="/etc/hadoop/conf"
 
 java -cp .:$hadoop:/opt/cloudera/parcels/CDH/jars/spark-assembly-1.3.1-hadoop2.5.0.jar:spark-core-0.0.1-SNAPSHOT-shaded.jar:/etc/hadoop/conf \
-com.melot.spark.streaming.ShutdownClient $@
+my.spark.streaming.ShutdownClient $@

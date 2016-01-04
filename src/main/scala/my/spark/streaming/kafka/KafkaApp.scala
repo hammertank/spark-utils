@@ -1,4 +1,4 @@
-package com.melot.spark.streaming.kafka
+package my.spark.streaming.kafka
 
 import org.apache.spark.Logging
 import org.apache.spark.SparkConf
@@ -7,15 +7,13 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.streaming.Seconds
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.streaming.kafka.KafkaUtils
-import kafka.serializer.StringDecoder
 import org.apache.spark.streaming.kafka.HasOffsetRanges
-import org.I0Itec.zkclient.ZkClient
+import org.apache.spark.streaming.kafka.KafkaUtils
+
 import kafka.message.MessageAndMetadata
-import kafka.message.MessageAndMetadata
-import my.spark.util.ConfigUtils
+import kafka.serializer.StringDecoder
 import my.spark.streaming.ShutdownServer
-import my.spark.streaming.kafka.ZKUtils
+import my.spark.util.ConfigUtils
 
 trait KafkaApp extends Logging {
   val BATCH_DURATION = "application.batch.duration"
