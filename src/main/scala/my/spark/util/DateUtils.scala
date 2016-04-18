@@ -11,6 +11,7 @@ import java.util.Calendar
 object DateUtils {
 
   val SECONDS_IN_DAY = 24 * 3600
+  val SECONDS_IN_MINUTE = 60
 
   val simpleDateFormatTL = new ThreadLocal[SimpleDateFormat]() {
     override def initialValue(): SimpleDateFormat = {
@@ -43,11 +44,11 @@ object DateUtils {
   }
 
   /**
-   * return a date string 
+   * convert timestamp to date string
    *
    * @param timestamp milliseconds since the epoch
    * @param pattern date pattern, default "yyyyMMdd"
-   * @return date string with given `pattern`
+   * @return date string in given `pattern`
    */
   def fromTimestamp(timestamp: Long, pattern: String = "yyyyMMdd") = {
     val calendar = calendarTL.get
@@ -55,6 +56,37 @@ object DateUtils {
 
     val dateFormatter = simpleDateFormatTL.get
     dateFormatter.applyPattern(pattern)
+    dateFormatter.format(calendar.getTime)
+  }
+
+  /**
+   * convert timestamp to date string
+   *
+   * @param timestamp seconds since the epoch
+   * @param pattern date pattern, default "yyyyMMdd"
+   * @return date string in given `pattern`
+   */
+  def fromUnixTimestamp(timestamp: Long, pattern: String = "yyyyMMdd") = {
+    fromTimestamp(timestamp * TimeUnit.SECONDS.toMillis(1), pattern)
+  }
+
+  /**
+   * Adds a number of days to a date
+   *
+   * @param dateStr date string in given `pattern`
+   * @param pattern date pattern, default "yyyyMMdd"
+   * @param days the amount to add, may be negative
+   * @return
+   */
+  def addDays(dateStr: String, pattern: String = "yyyyMMdd", amount: Int) = {
+    val dateFormatter = simpleDateFormatTL.get
+    dateFormatter.applyPattern(pattern)
+    val date = dateFormatter.parse(dateStr)
+
+    val calendar = calendarTL.get
+    calendar.setTime(date)
+    calendar.add(Calendar.DATE, amount)
+
     dateFormatter.format(calendar.getTime)
   }
 

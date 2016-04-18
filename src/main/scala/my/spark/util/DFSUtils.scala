@@ -1,17 +1,15 @@
 package my.spark.util
 
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
-import java.io.BufferedWriter
-import java.io.OutputStreamWriter
-import java.io.IOException
-import org.apache.hadoop.hdfs.DFSUtil
-import org.apache.hadoop.fs.FsShell
-import java.io.FileNotFoundException
 import java.io.BufferedReader
+import java.io.BufferedWriter
+import java.io.IOException
 import java.io.InputStreamReader
-import org.apache.hadoop.fs.permission.FsPermission
+import java.io.ObjectOutputStream
+import java.io.OutputStreamWriter
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.Path
 
 object DFSUtils {
   def rmr(pathStr: String, fs: FileSystem = FileSystem.get(new Configuration)) {
@@ -48,6 +46,16 @@ object DFSUtils {
       bf.flush()
     } finally {
       if (bf != null) bf.close()
+    }
+  }
+
+  def save(path: Path, obj: Object, fs: FileSystem) {
+    var oos: ObjectOutputStream = null
+    try {
+      oos = new ObjectOutputStream(fs.create(path, true))
+      oos.writeObject(obj)
+    } finally {
+      if (oos != null) oos.close()
     }
   }
 

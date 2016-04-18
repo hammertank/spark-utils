@@ -7,7 +7,9 @@ import org.apache.spark.Logging
 /**
  * @author hammertank
  *
+ * @Deprecated Deprecated since it does not allow more than one config instance
  */
+@Deprecated
 object ConfigUtils extends Logging {
   val config = ConfigFactory.load
 
@@ -34,9 +36,9 @@ object ConfigUtils extends Logging {
       case ex: ConfigException => default
     }
   }
-  
+
   def getBoolean(key: String, default: Boolean): Boolean = {
-     try {
+    try {
       config.getBoolean(key)
     } catch {
       case ex: ConfigException => default
